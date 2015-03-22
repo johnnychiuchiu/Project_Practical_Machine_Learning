@@ -1,0 +1,136 @@
+---
+title: "Course Project of Practical Machine Learning"
+author: "JohnnyChiu"
+date: "2015/3/21"
+output: html_document
+---
+
+###1. Load the data into r and take a quick look at our dataset. I also split our training data set into two groups for cross validation, called 'intrain_training' and 'intrain_testing'.
+```{r, cache=TRUE}
+setwd('/Users/JohnnyChiu/Desktop/檔案總管/學習/coursera/JohnHopkins-DataScience/Practical Machine Learning/project/')
+training<-read.csv('pml-training.csv')
+testing<-read.csv('pml-testing.csv')
+dim(training)
+dim(testing)
+summary(training)
+
+library(caret)
+inTrain <- createDataPartition(y=training$classe,p=0.75, list=FALSE)
+intrain_training <- training[inTrain,]
+intrain_testing <- training[-inTrain,]
+```
+
+I will subset some of the elements out, and make every variable into type numeric for model fitting.
+```{r}
+library(dplyr)
+intrain_training[intrain_training=='']<-NA
+sub_intrain_training<-intrain_training[,!is.na(intrain_training[1,])]
+sub_intrain_training<-sub_intrain_training[,c(-1,-2)]
+dim(sub_intrain_training)
+
+intrain_testing[intrain_testing=='']<-NA
+sub_intrain_testing<-intrain_testing[,!is.na(intrain_testing[1,])]
+sub_intrain_testing<-sub_intrain_testing[,c(-1,-2)]
+dim(sub_intrain_testing)
+
+for(i in 1:(dim(sub_intrain_training)[2]-1)){
+  sub_intrain_training[,i]<-as.numeric(sub_intrain_training[,i])
+}
+
+for(i in 1:(dim(sub_intrain_testing)[2]-1)){
+  sub_intrain_testing[,i]<-as.numeric(sub_intrain_testing[,i])
+}
+
+```
+
+###2. Build models on the training dataset
+
+***First, the rpart model***
+```{r, cache=TRUE}
+
+modFit_rpart <- train(classe ~ .,method="rpart",data=sub_intrain_training)
+print(modFit_rpart$finalModel)
+library(rattle)
+fancyRpartPlot(modFit_rpart$finalModel)
+predict(modFit_rpart,newdata=sub_intrain_testing)
+confusionMatrix(sub_intrain_testing$classe,predict(modFit_rpart,newdata=sub_intrain_testing))
+#table(sub_intrain_testing$classe)
+#table(predict(modFit_rpart,newdata=sub_intrain_testing))
+```
+
+
+
+***Second, the naive bayes model***
+```{r,cache=TRUE}
+modFit_nb <- train(classe ~ ., data=sub_intrain_training,method="nb")
+predict(modFit_nb,sub_intrain_testing)
+table(predict(modFit_nb,sub_intrain_testing),sub_intrain_testing$classe)
+confusionMatrix(sub_intrain_testing$classe,predict(modFit_nb,newdata=sub_intrain_testing))
+```
+
+***Third, the Linear discriminant analysis(lda) model***
+```{r,cache=TRUE}
+modFit_lda <- train(classe ~ ., data=sub_intrain_training,method="lda")
+predict(modFit_lda,sub_intrain_testing)
+table(predict(modFit_lda,sub_intrain_testing),sub_intrain_testing$classe)
+confusionMatrix(sub_intrain_testing$classe,predict(modFit_lda,newdata=sub_intrain_testing))
+
+```
+
+***Fourth, the random forest model. However, it seems it will take very long time to run.***
+```{r}
+##method1
+#it takes too ling to run it.
+# modFit_ranforest <- train(classe~ .,data=sub_intrain_training,method="rf",prox=TRUE)
+# modFit_ranforest
+# getTree(modFit_ranforest$finalModel,k=2)
+# pred <- predict(modFit,testing); testing$predRight <- pred==testing$Species
+# table(pred,testing$Species)
+
+##method2
+library(randomForest)
+set.seed(415)
+modFit_ranforest2 <- randomForest(as.factor(classe) ~ ., data=sub_intrain_training, importance=TRUE, ntree=50)
+varImpPlot(modFit_ranforest2)
+predict(modFit_ranforest2, sub_intrain_testing)
+confusionMatrix(sub_intrain_testing$classe,predict(modFit_ranforest2,newdata=sub_intrain_testing))
+```
+***The accuracy of each model***
+* rpart:0.5326
+* naive bayes:0.7606
+* Linear discriminant analysis(lda):0.803
+* Random Forest:0.9986
+
+***Hence, we choose Random Forest to model our data.
+
+
+###3. Choose the best model from the models that we built, and use the model we fit to predict our testing dataset  
+```{r, cache=TRUE}
+testing[testing=='']<-NA
+testing<-testing[,!is.na(testing[1,])]
+testing<-testing[,c(-1,-2)]
+dim(testing)
+for(i in 1:(dim(testing)[2]-1)){
+  testing[,i]<-as.numeric(testing[,i])
+}
+
+predict(modFit_ranforest2, testing)
+```
+
+###4. to generate the file to submit to the coursera website.
+```{r, cache=TRUE}
+answers = c('B','A','B','A','A','E','D','B','A','A','B','C','B','A','E','E','A','B','B','B')
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+```
+
+
+
+
